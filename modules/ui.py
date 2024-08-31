@@ -26,7 +26,7 @@ import modules.shared as shared
 from modules import prompt_parser
 from modules.infotext_utils import image_from_url_text, PasteField
 from modules_forge.forge_canvas.canvas import ForgeCanvas, canvas_head
-from modules_forge import main_entry
+from modules_forge import main_entry, forge_space
 
 
 create_setting_component = ui_settings.create_setting_component
@@ -307,9 +307,9 @@ def create_ui():
 
                     elif category == "cfg":
                         with gr.Row():
-                            distilled_cfg_scale = gr.Slider(minimum=0.0, maximum=30.0, step=0.5, label='Distilled CFG Scale', value=3.5, elem_id="txt2img_distilled_cfg_scale")
+                            distilled_cfg_scale = gr.Slider(minimum=0.0, maximum=30.0, step=0.1, label='Distilled CFG Scale', value=3.5, elem_id="txt2img_distilled_cfg_scale")
                         with gr.Row():
-                            cfg_scale = gr.Slider(minimum=1.0, maximum=30.0, step=0.5, label='CFG Scale', value=7.0, elem_id="txt2img_cfg_scale")
+                            cfg_scale = gr.Slider(minimum=1.0, maximum=30.0, step=0.1, label='CFG Scale', value=7.0, elem_id="txt2img_cfg_scale")
                             cfg_scale.change(lambda x: gr.update(interactive=(x != 1)), inputs=[cfg_scale], outputs=[toprow.negative_prompt], queue=False, show_progress=False)
 
                     elif category == "checkboxes":
@@ -853,6 +853,9 @@ def create_ui():
 
         extra_tabs.__exit__()
 
+    with gr.Blocks(analytics_enabled=False, head=canvas_head) as space_interface:
+        forge_space.main_entry()
+
     scripts.scripts_current = None
 
     with gr.Blocks(analytics_enabled=False, head=canvas_head) as extras_interface:
@@ -891,6 +894,7 @@ def create_ui():
     interfaces = [
         (txt2img_interface, "Txt2img", "txt2img"),
         (img2img_interface, "Img2img", "img2img"),
+        (space_interface, "Spaces", "space"),
         (extras_interface, "Extras", "extras"),
         (pnginfo_interface, "PNG Info", "pnginfo"),
         (modelmerger_ui.blocks, "Checkpoint Merger", "modelmerger"),
@@ -902,12 +906,14 @@ def create_ui():
     extensions_interface = ui_extensions.create_ui()
     interfaces += [(extensions_interface, "Extensions", "extensions")]
 
+    interface_names_without_quick_setting_bars = ["Spaces"]
+
     shared.tab_names = []
     for _interface, label, _ifid in interfaces:
         shared.tab_names.append(label)
 
     with gr.Blocks(theme=shared.gradio_theme, analytics_enabled=False, title="Stable Diffusion", head=canvas_head) as demo:
-        settings.add_quicksettings()
+        quicksettings_row = settings.add_quicksettings()
 
         parameters_copypaste.connect_paste_params_buttons()
 
@@ -927,6 +933,11 @@ def create_ui():
             loadsave.add_component(f"webui/Tabs@{tabs.elem_id}", tabs)
 
             loadsave.setup_ui()
+
+        def tab_changed(evt: gr.SelectData):
+            return gr.update(visible=evt.value not in interface_names_without_quick_setting_bars)
+
+        tabs.select(tab_changed, outputs=[quicksettings_row], show_progress=False, queue=False)
 
         if os.path.exists(os.path.join(script_path, "notification.mp3")) and shared.opts.notification_audio:
             gr.Audio(interactive=False, value=os.path.join(script_path, "notification.mp3"), elem_id="audio_notification", visible=False)
